@@ -1,0 +1,31 @@
+# PowerFleet Relay: replays Traccar position history to any HTTP server.
+services:
+  relay:
+    build: .
+    image: powerfleet-relay:latest
+    restart: unless-stopped
+    stop_grace_period: 90s # lets running jobs finish their in-flight request and save checkpoints
+    ports:
+      - "127.0.0.1:8090:8090" # reach it through an SSH tunnel or a proxy with TLS
+    environment:
+      RELAY_ADMIN_PASSWORD: ${RELAY_ADMIN_PASSWORD:?set RELAY_ADMIN_PASSWORD}
+      RELAY_SECRET_KEY: ${RELAY_SECRET_KEY:?set RELAY_SECRET_KEY (encrypts the stored DB password)}
+      # Optional: pre-configure the Traccar database (can also be set in the web UI)
+      RELAY_DB_MODE: ${RELAY_DB_MODE:-}
+      RELAY_DB_SOCKET: ${RELAY_DB_SOCKET:-}
+      RELAY_DB_HOST: ${RELAY_DB_HOST:-}
+      RELAY_DB_PORT: ${RELAY_DB_PORT:-}
+      RELAY_DB_USER: ${RELAY_DB_USER:-}
+      RELAY_DB_PASSWORD: ${RELAY_DB_PASSWORD:-}
+      RELAY_DB_NAME: ${RELAY_DB_NAME:-}
+    volumes:
+      - relay_data:/data
+      # Traccar's MySQL/MariaDB runs on the host OS. Mount its socket DIRECTORY (not the file,
+      # so a MySQL restart that recreates the socket is still visible). Debian: /run/mysqld
+      - ${MYSQL_SOCKET_DIR:-/run/mysqld}:/run/mysqld:ro
+    extra_hosts:
+      # alternative to the socket: TCP to the host at host.docker.internal:3306
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  relay_data:
