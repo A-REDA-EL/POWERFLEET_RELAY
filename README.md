@@ -78,7 +78,7 @@ zone does not matter.
 ```bash
 cp .env.example .env   # set RELAY_ADMIN_PASSWORD and RELAY_SECRET_KEY (openssl rand -hex 32)
 docker compose up -d --build
-# UI on http://127.0.0.1:8090 — use an SSH tunnel or put it behind a proxy with TLS
+# UI on http://SERVER_IP:8090 (plain HTTP: firewall it or put a proxy with TLS in front)
 ```
 
 | Variable | |
