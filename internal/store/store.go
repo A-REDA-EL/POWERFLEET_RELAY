@@ -290,6 +290,15 @@ func (s *Store) JobsWithStatus(ctx context.Context, statuses ...string) ([]Job, 
 	return out, nil
 }
 
+// UpdateJobTarget changes where and how a job delivers (URL, headers incl. the API key, pacing).
+// Progress and checkpoints are untouched, so a resumed job continues where it stopped.
+func (s *Store) UpdateJobTarget(ctx context.Context, id int64, targetURL string, headers map[string]string, concurrency, rateLimit, timeoutSeconds int) error {
+	h, _ := json.Marshal(headers)
+	_, err := s.db.ExecContext(ctx, `UPDATE jobs SET target_url = ?, headers = ?, concurrency = ?, rate_limit = ?, timeout_seconds = ? WHERE id = ?`,
+		targetURL, string(h), concurrency, rateLimit, timeoutSeconds, id)
+	return err
+}
+
 func (s *Store) SetStatus(ctx context.Context, id int64, status string) error {
 	q := "UPDATE jobs SET status = ?"
 	args := []any{status}

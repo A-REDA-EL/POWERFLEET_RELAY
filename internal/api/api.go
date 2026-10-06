@@ -65,6 +65,7 @@ func (s *Server) Handler() http.Handler {
 	authed.HandleFunc("GET /api/jobs", s.listJobs)
 	authed.HandleFunc("POST /api/jobs", s.createJob)
 	authed.HandleFunc("GET /api/jobs/{id}", s.getJob)
+	authed.HandleFunc("PATCH /api/jobs/{id}", s.updateJobTarget)
 	authed.HandleFunc("POST /api/jobs/{id}/{action}", s.jobAction)
 	authed.HandleFunc("DELETE /api/jobs/{id}", s.deleteJob)
 	mux.Handle("/api/", s.requireAuth(authed))
@@ -596,6 +597,59 @@ func nonNil[T any](s []T) []T {
 		return []T{}
 	}
 	return s
+}
+
+// updateJobTarget lets a job that is not running be fixed (wrong API key or URL) and resumed.
+func (s *Server) updateJobTarget(w http.ResponseWriter, r *http.Request) {
+	id, ok := jobID(w, r)
+	if !ok {
+		return
+	}
+	var req struct {
+		TargetURL      string            `json:"targetUrl"`
+		Headers        map[string]string `json:"headers"`
+		Concurrency    int               `json:"concurrency"`
+		RateLimit      int               `json:"rateLimit"`
+		TimeoutSeconds int               `json:"timeoutSeconds"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	job, err := s.Store.Job(r.Context(), id)
+	if err != nil {
+		writeError(w, 404, "job not found")
+		return
+	}
+	if s.Manager.Running(id) {
+		writeError(w, 409, "pause the job before editing it")
+		return
+	}
+	switch job.Status {
+	case store.StatusCompleted, store.StatusCancelled:
+		writeError(w, 409, "a finished job cannot be edited; use Run again")
+		return
+	}
+	if err := validURL(req.TargetURL); err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
+	if job.Mode == store.ModeImport {
+		if !hasHeader(req.Headers, "X-Api-Key") {
+			writeError(w, 400, "PowerFleet import needs the Server's API key (X-Api-Key)")
+			return
+		}
+		req.Concurrency = clamp(req.Concurrency, 1, 8, 2)
+	} else {
+		req.Concurrency = clamp(req.Concurrency, 1, 64, 4)
+	}
+	req.RateLimit = clamp(req.RateLimit, 0, 100000, 100)
+	req.TimeoutSeconds = clamp(req.TimeoutSeconds, 1, 300, 20)
+	if err := s.Store.UpdateJobTarget(r.Context(), id, req.TargetURL, req.Headers, req.Concurrency, req.RateLimit, req.TimeoutSeconds); err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+	_ = s.Store.AddEvent(r.Context(), id, "info", "Target settings edited")
+	writeJSON(w, 200, map[string]bool{"ok": true})
 }
 
 func (s *Server) jobAction(w http.ResponseWriter, r *http.Request) {

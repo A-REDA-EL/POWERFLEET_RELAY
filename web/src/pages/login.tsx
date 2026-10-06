@@ -3,7 +3,13 @@ import { RadioTowerIcon } from "lucide-react"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
@@ -37,7 +43,9 @@ export function LoginPage({ onSignedIn }: { onSignedIn: () => void }) {
             <RadioTowerIcon className="size-5" />
           </span>
           <CardTitle>PowerFleet Relay</CardTitle>
-          <CardDescription>Replay Traccar position history to any server.</CardDescription>
+          <CardDescription>
+            Replay Traccar position history to any server.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={submit}>

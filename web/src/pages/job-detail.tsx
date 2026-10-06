@@ -5,12 +5,14 @@ import {
   CircleAlertIcon,
   CopyIcon,
   PauseIcon,
+  PencilIcon,
   PlayIcon,
   Trash2Icon,
   XIcon,
 } from "lucide-react"
 
 import { PageHeader } from "@/components/app-shell"
+import { EditTargetDialog } from "@/components/edit-target-dialog"
 import { StatusBadge } from "@/components/status-badge"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
@@ -61,6 +63,7 @@ export function JobDetailPage() {
   const navigate = useNavigate()
   const [active, setActive] = useState(true)
   const [rate, setRate] = useState(0)
+  const [editing, setEditing] = useState(false)
   const last = useRef<{ t: number; done: number } | null>(null)
 
   // Fetches the job and derives a smoothed delivery rate from successive polls.
@@ -173,6 +176,12 @@ export function JobDetailPage() {
                 onConfirm={() => action("cancel")}
               />
             )}
+            {!job.active && !finished && (
+              <Button variant="outline" onClick={() => setEditing(true)}>
+                <PencilIcon data-icon="inline-start" />
+                Edit target
+              </Button>
+            )}
             <Button
               variant="outline"
               onClick={() => navigate("/new", { state: { from: job } })}
@@ -193,6 +202,15 @@ export function JobDetailPage() {
           </>
         }
       />
+
+      {editing && (
+        <EditTargetDialog
+          job={job}
+          open
+          onOpenChange={setEditing}
+          onSaved={refresh}
+        />
+      )}
 
       {job.waitingSince && (
         <Alert variant="destructive" className="mb-6">

@@ -192,6 +192,13 @@ export const api = {
   jobs: () => request<Job[]>("GET", "/api/jobs"),
   job: (id: number) => request<JobDetail>("GET", `/api/jobs/${id}`),
   createJob: (job: NewJob) => request<Job>("POST", "/api/jobs", job),
+  updateJob: (
+    id: number,
+    target: Pick<
+      NewJob,
+      "targetUrl" | "headers" | "concurrency" | "rateLimit" | "timeoutSeconds"
+    >
+  ) => request("PATCH", `/api/jobs/${id}`, target),
   jobAction: (id: number, action: "pause" | "resume" | "cancel") =>
     request("POST", `/api/jobs/${id}/${action}`),
   deleteJob: (id: number) => request("DELETE", `/api/jobs/${id}`),

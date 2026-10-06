@@ -12,8 +12,15 @@ const labels: Record<Job["status"], string> = {
   failed: "Failed",
 }
 
-export function StatusBadge({ job }: { job: Pick<Job, "status" | "waitingSince"> }) {
-  if ((job.status === "running" || job.status === "counting") && job.waitingSince) {
+export function StatusBadge({
+  job,
+}: {
+  job: Pick<Job, "status" | "waitingSince">
+}) {
+  if (
+    (job.status === "running" || job.status === "counting") &&
+    job.waitingSince
+  ) {
     return (
       <Badge variant="destructive">
         <Spinner data-icon="inline-start" />
