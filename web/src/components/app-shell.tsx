@@ -1,13 +1,5 @@
 import { NavLink, Outlet, useNavigate } from "react-router"
-import {
-  DatabaseIcon,
-  HistoryIcon,
-  LogOutIcon,
-  MoonIcon,
-  PlusIcon,
-  RadioTowerIcon,
-  SunIcon,
-} from "lucide-react"
+import { DatabaseIcon, HistoryIcon, LogOutIcon, MoonIcon, PlusIcon, RadioTowerIcon, SunIcon } from "lucide-react"
 
 import { useTheme } from "@/components/theme-provider"
 import { Button } from "@/components/ui/button"
@@ -23,19 +15,13 @@ const links = [
 export function AppShell({ onSignOut }: { onSignOut: () => void }) {
   const navigate = useNavigate()
   const { theme, setTheme } = useTheme()
-  const dark =
-    theme === "dark" ||
-    (theme === "system" &&
-      window.matchMedia("(prefers-color-scheme: dark)").matches)
+  const dark = theme === "dark" || (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches)
 
   return (
     <div className="flex min-h-svh flex-col bg-muted/30">
       <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-6xl items-center gap-6 px-4">
-          <button
-            className="flex items-center gap-2 font-semibold"
-            onClick={() => navigate("/jobs")}
-          >
+          <button className="flex items-center gap-2 font-semibold" onClick={() => navigate("/jobs")}>
             <span className="flex size-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
               <RadioTowerIcon className="size-4" />
             </span>
@@ -59,12 +45,7 @@ export function AppShell({ onSignOut }: { onSignOut: () => void }) {
             ))}
           </nav>
           <div className="ml-auto flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Toggle theme"
-              onClick={() => setTheme(dark ? "light" : "dark")}
-            >
+            <Button variant="ghost" size="icon" aria-label="Toggle theme" onClick={() => setTheme(dark ? "light" : "dark")}>
               {dark ? <SunIcon /> : <MoonIcon />}
             </Button>
             <Button
@@ -88,22 +69,12 @@ export function AppShell({ onSignOut }: { onSignOut: () => void }) {
   )
 }
 
-export function PageHeader({
-  title,
-  description,
-  actions,
-}: {
-  title: string
-  description?: string
-  actions?: React.ReactNode
-}) {
+export function PageHeader({ title, description, actions }: { title: string; description?: string; actions?: React.ReactNode }) {
   return (
     <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
       <div className="flex flex-col gap-1">
         <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-        {description && (
-          <p className="text-sm text-muted-foreground">{description}</p>
-        )}
+        {description && <p className="text-sm text-muted-foreground">{description}</p>}
       </div>
       {actions && <div className="flex items-center gap-2">{actions}</div>}
     </div>

@@ -1,17 +1,7 @@
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 
 // Loads data and refreshes it every `interval` ms (pass 0 to stop polling).
-export function usePoll<T>(
-  load: () => Promise<T>,
-  interval: number,
-  deps: unknown[] = []
-) {
+export function usePoll<T>(load: () => Promise<T>, interval: number, deps: unknown[] = []) {
   const [data, setData] = useState<T | null>(null)
   const [error, setError] = useState<string | null>(null)
   const loadRef = useRef(load)

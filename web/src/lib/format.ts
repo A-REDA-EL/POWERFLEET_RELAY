@@ -25,8 +25,7 @@ export function fmtRelative(iso: string | null | undefined) {
 export function fmtDuration(seconds: number) {
   if (!isFinite(seconds) || seconds < 0) return "—"
   if (seconds < 60) return `${Math.round(seconds)} s`
-  if (seconds < 3600)
-    return `${Math.floor(seconds / 60)} min ${Math.round(seconds % 60)} s`
+  if (seconds < 3600) return `${Math.floor(seconds / 60)} min ${Math.round(seconds % 60)} s`
   return `${Math.floor(seconds / 3600)} h ${Math.round((seconds % 3600) / 60)} min`
 }
 
