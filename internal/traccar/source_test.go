@@ -42,3 +42,16 @@ func TestDSNPinsUTC(t *testing.T) {
 		t.Fatalf("dsn: %s", dsn)
 	}
 }
+
+func TestAsIntHandlesMySQLBit(t *testing.T) {
+	for _, c := range []struct {
+		in   any
+		want int64
+	}{
+		{[]byte{0}, 0}, {[]byte{1}, 1}, {[]byte("1"), 1}, {[]byte("0"), 0}, {int64(1), 1}, {nil, 0},
+	} {
+		if got := asInt(c.in); got != c.want {
+			t.Errorf("asInt(%v) = %d, want %d", c.in, got, c.want)
+		}
+	}
+}

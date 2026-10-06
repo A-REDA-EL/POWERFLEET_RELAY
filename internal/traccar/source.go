@@ -310,7 +310,7 @@ func (s *Source) Page(ctx context.Context, deviceID int64, from, to time.Time, a
 			protocol, address                 sql.NullString
 			attributes, network, geofences    sql.NullString
 			serverTime, deviceTime, fixTime   sql.NullTime
-			valid                             sql.NullInt64
+			valid                             any // BIT(1) arrives as []byte; see asInt
 			altitude, speed, course, accuracy sql.NullFloat64
 		)
 		if err := rows.Scan(&p.ID, &protocol, &p.DeviceID, &serverTime, &deviceTime, &fixTime, &valid,
@@ -321,7 +321,7 @@ func (s *Source) Page(ctx context.Context, deviceID int64, from, to time.Time, a
 		p.Protocol = nullString(protocol)
 		p.Address = nullString(address)
 		p.ServerTime, p.DeviceTime, p.FixTime = nullTime(serverTime), nullTime(deviceTime), nullTime(fixTime)
-		p.Valid = valid.Int64 != 0
+		p.Valid = asInt(valid) != 0
 		p.Altitude = Number{altitude.Float64, is32("altitude")}
 		p.Speed = Number{speed.Float64, is32("speed")}
 		p.Course = Number{course.Float64, is32("course")}
@@ -415,7 +415,14 @@ func asInt(v any) int64 {
 		}
 		return 0
 	case []byte:
-		n, _ := strconv.ParseInt(string(x), 10, 64)
+		if n, err := strconv.ParseInt(string(x), 10, 64); err == nil {
+			return n
+		}
+		// MySQL BIT(n) columns (valid, disabled) arrive as raw big-endian bytes, e.g. "\x01".
+		var n int64
+		for _, b := range x {
+			n = n<<8 | int64(b)
+		}
 		return n
 	}
 	return 0
