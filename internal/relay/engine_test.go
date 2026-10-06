@@ -41,8 +41,10 @@ func newFakeSource(devices, perDevice int) *fakeSource {
 	return s
 }
 
-func (s *fakeSource) Devices(context.Context) ([]traccar.Device, error) { return s.devices, nil }
-func (s *fakeSource) Close() error                                      { return nil }
+func (s *fakeSource) DevicesByIDs(context.Context, []int64) ([]traccar.Device, error) {
+	return s.devices, nil
+}
+func (s *fakeSource) Close() error { return nil }
 func (s *fakeSource) Count(_ context.Context, id int64, from, to time.Time) (int64, error) {
 	return int64(len(s.positions[id])), nil
 }

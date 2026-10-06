@@ -27,7 +27,7 @@ import (
 
 // Source is the part of the Traccar database the engine needs.
 type Source interface {
-	Devices(ctx context.Context) ([]traccar.Device, error)
+	DevicesByIDs(ctx context.Context, ids []int64) ([]traccar.Device, error)
 	Count(ctx context.Context, deviceID int64, from, to time.Time) (int64, error)
 	Page(ctx context.Context, deviceID int64, from, to time.Time, after traccar.Cursor, limit int) ([]traccar.Position, error)
 	Close() error
@@ -241,7 +241,11 @@ func (r *run) execute() {
 	}
 
 	traccarDevices := map[int64]traccar.Device{}
-	if list, err := src.Devices(ctx); err == nil {
+	ids := make([]int64, len(devices))
+	for i, d := range devices {
+		ids[i] = d.DeviceID
+	}
+	if list, err := src.DevicesByIDs(ctx, ids); err == nil {
 		for _, d := range list {
 			traccarDevices[d.ID] = d
 		}

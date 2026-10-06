@@ -82,6 +82,8 @@ const presets = [
 ] as const
 
 const API_KEY_HEADER = "X-Api-Key"
+const DEVICE_PAGE_SIZE = 50
+const REVIEW_LIMIT = 100
 
 function apiKeyOf(headers: Record<string, string> | null | undefined) {
   const entry = Object.entries(headers ?? {}).find(
@@ -135,10 +137,19 @@ export function NewRelayPage() {
     toLocalInput(prefill ? new Date(prefill.to) : new Date())
   )
 
-  const [devices, setDevices] = useState<Device[] | null>(null)
+  // The fleet can be tens of thousands of devices: the list is searched and paged on the server.
+  const [devicePage, setDevicePage] = useState<{
+    items: Device[]
+    total: number
+  } | null>(null)
   const [devicesError, setDevicesError] = useState<string | null>(null)
+  const [loadingDevices, setLoadingDevices] = useState(false)
   const [search, setSearch] = useState("")
+  const [query, setQuery] = useState("") // debounced search
+  const [pageIndex, setPageIndex] = useState(0)
   const [selected, setSelected] = useState<Set<number>>(new Set())
+  const [selectingAll, setSelectingAll] = useState(false)
+  const [reviewDevices, setReviewDevices] = useState<Device[] | null>(null)
 
   const [mode, setMode] = useState<JobMode>(prefill?.mode ?? "forward")
   const [targetUrl, setTargetUrl] = useState(prefill?.targetUrl ?? "")
@@ -189,42 +200,75 @@ export function NewRelayPage() {
     range.from < range.to
 
   useEffect(() => {
-    api
-      .devices()
-      .then((list) => {
-        setDevices(list)
-        if (prefill) {
-          // "Run again" keeps the same device selection when the job's devices are known
-          api
-            .job(prefill.id)
-            .then((d) => setSelected(new Set(d.devices.map((x) => x.deviceId))))
-        }
-      })
-      .catch((e) => setDevicesError(errorMessage(e)))
+    // "Run again" keeps the same device selection when the job's devices are known
+    if (prefill)
+      api
+        .job(prefill.id)
+        .then((d) => setSelected(new Set(d.devices.map((x) => x.deviceId))))
+        .catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    if (!devices) return []
-    if (!q) return devices
-    return devices.filter((d) =>
-      [d.name, d.uniqueId, d.category, d.model].some((v) =>
-        v?.toLowerCase().includes(q)
-      )
-    )
-  }, [devices, search])
-  const allFilteredSelected =
-    filtered.length > 0 && filtered.every((d) => selected.has(d.id))
-  const someFilteredSelected = filtered.some((d) => selected.has(d.id))
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setQuery(search.trim())
+      setPageIndex(0)
+    }, 300)
+    return () => clearTimeout(t)
+  }, [search])
 
-  function toggleAll(checked: boolean) {
+  useEffect(() => {
+    let current = true
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setLoadingDevices(true)
+    api
+      .devices(query, DEVICE_PAGE_SIZE, pageIndex * DEVICE_PAGE_SIZE)
+      .then((r) => {
+        if (!current) return
+        setDevicePage(r)
+        setDevicesError(null)
+      })
+      .catch((e) => current && setDevicesError(errorMessage(e)))
+      .finally(() => current && setLoadingDevices(false))
+    return () => {
+      current = false
+    }
+  }, [query, pageIndex])
+
+  const pageItems = devicePage?.items ?? []
+  const allPageSelected =
+    pageItems.length > 0 && pageItems.every((d) => selected.has(d.id))
+  const somePageSelected = pageItems.some((d) => selected.has(d.id))
+
+  function togglePage(checked: boolean) {
     const next = new Set(selected)
-    for (const d of filtered) {
+    for (const d of pageItems) {
       if (checked) next.add(d.id)
       else next.delete(d.id)
     }
     setSelected(next)
+  }
+
+  async function selectAllMatching() {
+    setSelectingAll(true)
+    try {
+      const r = await api.deviceIds(query)
+      setSelected((prev) => new Set([...prev, ...r.ids]))
+      if (r.capped)
+        toast.add({
+          title: "Selection capped",
+          description: `Only the first ${fmtNumber(r.ids.length)} matching devices were selected.`,
+          type: "warning",
+        })
+    } catch (e) {
+      toast.add({
+        title: "Could not select devices",
+        description: errorMessage(e),
+        type: "error",
+      })
+    } finally {
+      setSelectingAll(false)
+    }
   }
 
   function toggle(id: number, checked: boolean) {
@@ -305,7 +349,15 @@ export function NewRelayPage() {
 
   function goTo(next: number) {
     setStep(next)
-    if (next === 3) runEstimate()
+    if (next === 3) {
+      runEstimate()
+      // the review lists the first devices by name; the rest are only counted
+      setReviewDevices(null)
+      api
+        .lookupDevices([...selected].slice(0, REVIEW_LIMIT))
+        .then(setReviewDevices)
+        .catch(() => setReviewDevices([]))
+    }
   }
 
   async function start() {
@@ -363,7 +415,8 @@ export function NewRelayPage() {
     )
   }
 
-  const selectedDevices = devices?.filter((d) => selected.has(d.id)) ?? []
+  const selectedDevices = reviewDevices ?? []
+  const hiddenDevices = Math.max(selected.size - REVIEW_LIMIT, 0)
   const etaSeconds =
     estimate && rateLimit > 0 ? estimate.total / rateLimit : NaN
 
@@ -478,8 +531,8 @@ export function NewRelayPage() {
           <CardHeader>
             <CardTitle>Which devices?</CardTitle>
             <CardDescription>
-              {devices
-                ? `${fmtNumber(selected.size)} of ${fmtNumber(devices.length)} devices selected`
+              {devicePage
+                ? `${fmtNumber(selected.size)} selected · ${fmtNumber(devicePage.total)} ${query ? "match" : "in Traccar"}`
                 : "Loading devices from Traccar…"}
             </CardDescription>
           </CardHeader>
@@ -494,80 +547,140 @@ export function NewRelayPage() {
                 onChange={(e) => setSearch(e.target.value)}
               />
             </InputGroup>
-            {!devices ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={selectingAll || !devicePage || devicePage.total === 0}
+                onClick={selectAllMatching}
+              >
+                {selectingAll && <Spinner data-icon="inline-start" />}
+                {query
+                  ? `Select all ${fmtNumber(devicePage?.total ?? 0)} matching`
+                  : `Select all ${fmtNumber(devicePage?.total ?? 0)} devices`}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={selected.size === 0}
+                onClick={() => setSelected(new Set())}
+              >
+                Clear selection
+              </Button>
+            </div>
+            {!devicePage ? (
               <div className="flex flex-col gap-2">
                 {Array.from({ length: 6 }).map((_, i) => (
                   <Skeleton key={i} className="h-9 w-full" />
                 ))}
               </div>
             ) : (
-              <ScrollArea className="h-[26rem] rounded-lg border">
-                <Table>
-                  <TableHeader className="sticky top-0 bg-background">
-                    <TableRow>
-                      <TableHead className="w-10">
-                        <Checkbox
-                          aria-label="Select all"
-                          checked={allFilteredSelected}
-                          indeterminate={
-                            !allFilteredSelected && someFilteredSelected
-                          }
-                          onCheckedChange={(c) => toggleAll(Boolean(c))}
-                        />
-                      </TableHead>
-                      <TableHead>Name</TableHead>
-                      <TableHead>IMEI / unique ID</TableHead>
-                      <TableHead>Category</TableHead>
-                      <TableHead>Last update</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filtered.map((d) => (
-                      <TableRow
-                        key={d.id}
-                        data-state={selected.has(d.id) ? "selected" : undefined}
-                        className="cursor-pointer"
-                        onClick={() => toggle(d.id, !selected.has(d.id))}
-                      >
-                        <TableCell onClick={(e) => e.stopPropagation()}>
-                          <Checkbox
-                            aria-label={`Select ${d.name}`}
-                            checked={selected.has(d.id)}
-                            onCheckedChange={(c) => toggle(d.id, Boolean(c))}
-                          />
-                        </TableCell>
-                        <TableCell className="font-medium">
-                          <div className="flex items-center gap-2">
-                            {d.name}
-                            {d.disabled && (
-                              <Badge variant="outline">Disabled</Badge>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="font-mono text-xs">
-                          {d.uniqueId}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {d.category ?? "—"}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {fmtRelative(d.lastUpdate)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    {filtered.length === 0 && (
+              <>
+                <ScrollArea
+                  className={cn(
+                    "h-[26rem] rounded-lg border",
+                    loadingDevices && "opacity-60"
+                  )}
+                >
+                  <Table>
+                    <TableHeader className="sticky top-0 bg-background">
                       <TableRow>
-                        <TableCell
-                          colSpan={5}
-                          className="h-24 text-center text-muted-foreground"
-                        >
-                          No devices match "{search}".
-                        </TableCell>
+                        <TableHead className="w-10">
+                          <Checkbox
+                            aria-label="Select this page"
+                            checked={allPageSelected}
+                            indeterminate={!allPageSelected && somePageSelected}
+                            onCheckedChange={(c) => togglePage(Boolean(c))}
+                          />
+                        </TableHead>
+                        <TableHead>Name</TableHead>
+                        <TableHead>IMEI / unique ID</TableHead>
+                        <TableHead>Category</TableHead>
+                        <TableHead>Last update</TableHead>
                       </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </ScrollArea>
+                    </TableHeader>
+                    <TableBody>
+                      {pageItems.map((d) => (
+                        <TableRow
+                          key={d.id}
+                          data-state={
+                            selected.has(d.id) ? "selected" : undefined
+                          }
+                          className="cursor-pointer"
+                          onClick={() => toggle(d.id, !selected.has(d.id))}
+                        >
+                          <TableCell onClick={(e) => e.stopPropagation()}>
+                            <Checkbox
+                              aria-label={`Select ${d.name}`}
+                              checked={selected.has(d.id)}
+                              onCheckedChange={(c) => toggle(d.id, Boolean(c))}
+                            />
+                          </TableCell>
+                          <TableCell className="font-medium">
+                            <div className="flex items-center gap-2">
+                              {d.name}
+                              {d.disabled && (
+                                <Badge variant="outline">Disabled</Badge>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="font-mono text-xs">
+                            {d.uniqueId}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {d.category ?? "—"}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {fmtRelative(d.lastUpdate)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      {pageItems.length === 0 && (
+                        <TableRow>
+                          <TableCell
+                            colSpan={5}
+                            className="h-24 text-center text-muted-foreground"
+                          >
+                            {query
+                              ? `No devices match "${query}".`
+                              : "No devices in Traccar."}
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
+                <div className="flex items-center justify-between text-sm text-muted-foreground">
+                  <span>
+                    {devicePage.total === 0
+                      ? "0 devices"
+                      : `${fmtNumber(pageIndex * DEVICE_PAGE_SIZE + 1)}–${fmtNumber(
+                          pageIndex * DEVICE_PAGE_SIZE + pageItems.length
+                        )} of ${fmtNumber(devicePage.total)}`}
+                  </span>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={pageIndex === 0 || loadingDevices}
+                      onClick={() => setPageIndex(pageIndex - 1)}
+                    >
+                      Previous
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={
+                        (pageIndex + 1) * DEVICE_PAGE_SIZE >=
+                          devicePage.total || loadingDevices
+                      }
+                      onClick={() => setPageIndex(pageIndex + 1)}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              </>
             )}
           </CardContent>
         </Card>
@@ -789,6 +902,13 @@ export function NewRelayPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
+                    {reviewDevices === null && (
+                      <TableRow>
+                        <TableCell colSpan={2}>
+                          <Skeleton className="h-4 w-full" />
+                        </TableCell>
+                      </TableRow>
+                    )}
                     {selectedDevices.map((d) => (
                       <TableRow key={d.id}>
                         <TableCell>
@@ -806,6 +926,16 @@ export function NewRelayPage() {
                         </TableCell>
                       </TableRow>
                     ))}
+                    {hiddenDevices > 0 && (
+                      <TableRow>
+                        <TableCell
+                          colSpan={2}
+                          className="text-center text-muted-foreground"
+                        >
+                          and {fmtNumber(hiddenDevices)} more
+                        </TableCell>
+                      </TableRow>
+                    )}
                   </TableBody>
                 </Table>
               </ScrollArea>

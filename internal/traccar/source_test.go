@@ -55,3 +55,13 @@ func TestAsIntHandlesMySQLBit(t *testing.T) {
 		}
 	}
 }
+
+func TestDeviceFilterEscapesLikeWildcards(t *testing.T) {
+	if where, args := deviceFilter("  "); where != "" || args != nil {
+		t.Fatalf("blank search must not filter, got %q %v", where, args)
+	}
+	where, args := deviceFilter("50%_a")
+	if !strings.Contains(where, "WHERE") || len(args) != 4 || args[0] != `%50\%\_a%` {
+		t.Fatalf("unexpected filter %q %v", where, args)
+	}
+}

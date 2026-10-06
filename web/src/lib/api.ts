@@ -158,7 +158,18 @@ export const api = {
   testDatabase: (cfg: DbConfig) =>
     request<TraccarInfo>("POST", "/api/settings/database/test", cfg),
   info: () => request<TraccarInfo>("GET", "/api/traccar/info"),
-  devices: () => request<Device[]>("GET", "/api/devices"),
+  devices: (q: string, limit: number, offset: number) =>
+    request<{ items: Device[]; total: number }>(
+      "GET",
+      `/api/devices?${new URLSearchParams({ q, limit: String(limit), offset: String(offset) })}`
+    ),
+  deviceIds: (q: string) =>
+    request<{ ids: number[]; capped: boolean }>(
+      "GET",
+      `/api/devices/ids?${new URLSearchParams({ q })}`
+    ),
+  lookupDevices: (ids: number[]) =>
+    request<Device[]>("POST", "/api/devices/lookup", { ids }),
   estimate: (from: string, to: string, deviceIds: number[]) =>
     request<{ total: number; devices: { deviceId: number; count: number }[] }>(
       "POST",

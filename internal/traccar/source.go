@@ -188,13 +188,89 @@ type Device struct {
 	ExpirationTime *Time           `json:"expirationTime"`
 }
 
-// Devices reads tc_devices with SELECT * so it works across Traccar schema versions.
-func (s *Source) Devices(ctx context.Context) ([]Device, error) {
-	rows, err := s.db.QueryContext(ctx, "SELECT * FROM tc_devices ORDER BY name, id")
+// deviceFilter builds the WHERE clause for a free-text device search.
+func deviceFilter(q string) (string, []any) {
+	q = strings.TrimSpace(q)
+	if q == "" {
+		return "", nil
+	}
+	like := "%" + strings.NewReplacer(`\`, `\\`, "%", `\%`, "_", `\_`).Replace(q) + "%"
+	return " WHERE name LIKE ? OR uniqueid LIKE ? OR category LIKE ? OR model LIKE ?", []any{like, like, like, like}
+}
+
+// DevicePage is one page of a device search.
+type DevicePage struct {
+	Items []Device `json:"items"`
+	Total int64    `json:"total"`
+}
+
+// SearchDevices returns one page of tc_devices matching q (name, IMEI, category, model),
+// plus the total number of matches. Reading the whole table at once does not scale to
+// fleets with tens of thousands of devices, so the UI pages through this.
+func (s *Source) SearchDevices(ctx context.Context, q string, limit, offset int) (DevicePage, error) {
+	where, args := deviceFilter(q)
+	page := DevicePage{Items: []Device{}}
+	if err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM tc_devices"+where, args...).Scan(&page.Total); err != nil {
+		return page, err
+	}
+	rows, err := s.db.QueryContext(ctx, "SELECT * FROM tc_devices"+where+" ORDER BY name, id LIMIT ? OFFSET ?",
+		append(args, limit, offset)...)
+	if err != nil {
+		return page, err
+	}
+	defer rows.Close()
+	items, err := scanDevices(rows)
+	if items != nil {
+		page.Items = items
+	}
+	return page, err
+}
+
+// DeviceIDs returns the ids of up to max devices matching q, for "select all matching".
+func (s *Source) DeviceIDs(ctx context.Context, q string, max int) ([]int64, error) {
+	where, args := deviceFilter(q)
+	rows, err := s.db.QueryContext(ctx, "SELECT id FROM tc_devices"+where+" ORDER BY name, id LIMIT ?", append(args, max)...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
+	ids := []int64{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// DevicesByIDs reads just the given devices (ids that do not exist are omitted).
+func (s *Source) DevicesByIDs(ctx context.Context, ids []int64) ([]Device, error) {
+	const chunk = 1000
+	var out []Device
+	for start := 0; start < len(ids); start += chunk {
+		part := ids[start:min(start+chunk, len(ids))]
+		args := make([]any, len(part))
+		for i, id := range part {
+			args[i] = id
+		}
+		rows, err := s.db.QueryContext(ctx, "SELECT * FROM tc_devices WHERE id IN ("+strings.TrimSuffix(strings.Repeat("?,", len(part)), ",")+")", args...)
+		if err != nil {
+			return nil, err
+		}
+		list, err := scanDevices(rows)
+		rows.Close()
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, list...)
+	}
+	return out, nil
+}
+
+// scanDevices reads tc_devices rows selected with SELECT * so it works across Traccar schema versions.
+func scanDevices(rows *sql.Rows) ([]Device, error) {
 	cols, err := rows.Columns()
 	if err != nil {
 		return nil, err

@@ -58,6 +58,8 @@ func (s *Server) Handler() http.Handler {
 	authed.HandleFunc("POST /api/settings/database/test", s.testDatabase)
 	authed.HandleFunc("GET /api/traccar/info", s.traccarInfo)
 	authed.HandleFunc("GET /api/devices", s.devices)
+	authed.HandleFunc("GET /api/devices/ids", s.deviceIDs)
+	authed.HandleFunc("POST /api/devices/lookup", s.deviceLookup)
 	authed.HandleFunc("POST /api/estimate", s.estimate)
 	authed.HandleFunc("POST /api/target/test", s.testTarget)
 	authed.HandleFunc("GET /api/jobs", s.listJobs)
@@ -253,14 +255,47 @@ func (s *Server) traccarInfo(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// maxSelectAll caps "select all matching" so one request cannot select an unbounded fleet.
+const maxSelectAll = 100000
+
 func (s *Server) devices(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	limit := min(max(atoiDefault(q.Get("limit"), 50), 1), 200)
+	offset := max(atoiDefault(q.Get("offset"), 0), 0)
 	s.withSource(w, r, func(ctx context.Context, src relay.Source) (any, error) {
-		list, err := src.Devices(ctx)
+		return src.(*traccar.Source).SearchDevices(ctx, q.Get("q"), limit, offset)
+	})
+}
+
+func (s *Server) deviceIDs(w http.ResponseWriter, r *http.Request) {
+	s.withSource(w, r, func(ctx context.Context, src relay.Source) (any, error) {
+		ids, err := src.(*traccar.Source).DeviceIDs(ctx, r.URL.Query().Get("q"), maxSelectAll)
+		return map[string]any{"ids": ids, "capped": len(ids) >= maxSelectAll}, err
+	})
+}
+
+// deviceLookup resolves ids to devices (the review step shows the selected ones by name).
+func (s *Server) deviceLookup(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		IDs []int64 `json:"ids"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	s.withSource(w, r, func(ctx context.Context, src relay.Source) (any, error) {
+		list, err := src.DevicesByIDs(ctx, req.IDs)
 		if list == nil {
 			list = []traccar.Device{}
 		}
 		return list, err
 	})
+}
+
+func atoiDefault(v string, def int) int {
+	if n, err := strconv.Atoi(v); err == nil {
+		return n
+	}
+	return def
 }
 
 type estimateRequest struct {
@@ -444,7 +479,7 @@ func (s *Server) createJob(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, friendlyDBError(err))
 		return
 	}
-	all, err := src.Devices(ctx)
+	all, err := src.DevicesByIDs(ctx, req.DeviceIDs)
 	src.Close()
 	if err != nil {
 		writeError(w, 500, err.Error())
