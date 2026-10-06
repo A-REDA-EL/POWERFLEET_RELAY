@@ -811,7 +811,7 @@ export function NewRelayPage() {
                     id="concurrency"
                     type="number"
                     min={1}
-                    max={64}
+                    max={32}
                     value={concurrency}
                     onChange={(e) => setConcurrency(Number(e.target.value))}
                   />
