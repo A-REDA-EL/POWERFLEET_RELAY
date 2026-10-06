@@ -25,6 +25,20 @@ type Config struct {
 	User     string `json:"user"`
 	Password string `json:"password,omitempty"`
 	Database string `json:"database"`
+	// TimeZone is the IANA zone Traccar's host/JVM ran in when it wrote the position times
+	// (e.g. "Europe/Paris"). Traccar stores wall-clock times in that zone; empty means UTC.
+	TimeZone string `json:"timeZone"`
+}
+
+func (c Config) location() (*time.Location, error) {
+	if strings.TrimSpace(c.TimeZone) == "" {
+		return time.UTC, nil
+	}
+	loc, err := time.LoadLocation(strings.TrimSpace(c.TimeZone))
+	if err != nil {
+		return nil, fmt.Errorf("unknown time zone %q (use an IANA name such as Europe/Paris)", c.TimeZone)
+	}
+	return loc, nil
 }
 
 func (c Config) DSN() (string, error) {
@@ -54,9 +68,14 @@ func (c Config) DSN() (string, error) {
 		return "", errors.New("database is required")
 	}
 	// TIMESTAMP columns are returned in the session time zone: pin it to UTC so the
-	// relay never depends on the MySQL server's own time zone.
+	// relay never depends on the MySQL server's own time zone. Traccar may have written
+	// local wall-clock times though (its JVM's zone); Loc says how to read them.
+	loc, err := c.location()
+	if err != nil {
+		return "", err
+	}
 	mc.ParseTime = true
-	mc.Loc = time.UTC
+	mc.Loc = loc
 	mc.Params = map[string]string{"time_zone": "'+00:00'"}
 	mc.Timeout = 10 * time.Second
 	mc.ReadTimeout = 5 * time.Minute

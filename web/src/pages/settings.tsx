@@ -14,7 +14,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { api, type DbConfig, type DbMode, type TraccarInfo } from "@/lib/api"
 import { errorMessage, fmtDateTime, fmtNumber } from "@/lib/format"
 
-const empty: DbConfig = { mode: "socket", host: "", port: 3306, socket: "/run/mysqld/mysqld.sock", user: "", password: "", database: "traccar" }
+const empty: DbConfig = { mode: "socket", host: "", port: 3306, socket: "/run/mysqld/mysqld.sock", user: "", password: "", database: "traccar", timeZone: "" }
 
 export function SettingsPage() {
   const [cfg, setCfg] = useState<DbConfig | null>(null)
@@ -110,6 +110,14 @@ export function SettingsPage() {
               <Field>
                 <FieldLabel htmlFor="database">Database</FieldLabel>
                 <Input id="database" value={cfg.database} onChange={(e) => set({ database: e.target.value })} />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="timeZone">Time zone of the Traccar server</FieldLabel>
+                <Input id="timeZone" placeholder="UTC" value={cfg.timeZone} onChange={(e) => set({ timeZone: e.target.value })} />
+                <FieldDescription>
+                  Traccar writes times in the time zone of the machine it runs on. Enter that zone (e.g. Europe/Paris; run timedatectl on the
+                  Traccar host). Leave empty if it runs in UTC. A wrong value shifts every relayed position by the difference.
+                </FieldDescription>
               </Field>
               <div className="grid gap-3 sm:grid-cols-2">
                 <Field>

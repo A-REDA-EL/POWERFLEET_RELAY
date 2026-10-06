@@ -8,6 +8,7 @@ export interface DbConfig {
   user: string
   password?: string
   database: string
+  timeZone: string
 }
 
 export interface TraccarInfo {

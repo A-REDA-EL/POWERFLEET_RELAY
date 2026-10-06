@@ -65,3 +65,16 @@ func TestDeviceFilterEscapesLikeWildcards(t *testing.T) {
 		t.Fatalf("unexpected filter %q %v", where, args)
 	}
 }
+
+func TestDSNReadsTimesInTheConfiguredZone(t *testing.T) {
+	dsn, err := Config{Mode: "tcp", Host: "h", User: "u", Database: "traccar", TimeZone: "Europe/Paris"}.DSN()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(dsn, "loc=Europe%2FParis") || !strings.Contains(dsn, "time_zone=%27%2B00%3A00%27") {
+		t.Fatalf("dsn: %s", dsn)
+	}
+	if _, err := (Config{Mode: "tcp", Host: "h", User: "u", Database: "traccar", TimeZone: "Mars/Base"}).DSN(); err == nil {
+		t.Fatal("an unknown zone must be rejected")
+	}
+}

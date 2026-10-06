@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"syscall"
 	"time"
+	_ "time/tzdata" // zone names work in the distroless image
 
 	"github.com/A-REDA-EL/powerfleet-relay/internal/api"
 	"github.com/A-REDA-EL/powerfleet-relay/internal/relay"
@@ -107,6 +108,7 @@ func bootstrapDatabase(ctx context.Context, srv *api.Server, st *store.Store, lo
 		Mode: env("RELAY_DB_MODE", "tcp"), Host: os.Getenv("RELAY_DB_HOST"), Port: port,
 		Socket: os.Getenv("RELAY_DB_SOCKET"), User: os.Getenv("RELAY_DB_USER"),
 		Password: os.Getenv("RELAY_DB_PASSWORD"), Database: env("RELAY_DB_NAME", "traccar"),
+		TimeZone: os.Getenv("RELAY_DB_TIMEZONE"),
 	}
 	log.Info("storing Traccar connection from environment", "mode", cfg.Mode, "host", cfg.Host, "socket", cfg.Socket)
 	return srv.SaveDB(ctx, cfg)
