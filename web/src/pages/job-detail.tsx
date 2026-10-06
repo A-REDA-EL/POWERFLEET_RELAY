@@ -7,6 +7,8 @@ import {
   PauseIcon,
   PencilIcon,
   PlayIcon,
+  RotateCcwIcon,
+  SkipForwardIcon,
   Trash2Icon,
   XIcon,
 } from "lucide-react"
@@ -84,7 +86,7 @@ export function JobDetailPage() {
   const { data, error, refresh } = usePoll(load, active ? 1000 : 5000, [id])
   const job = data?.job
 
-  async function action(a: "pause" | "resume" | "cancel") {
+  async function action(a: "pause" | "resume" | "cancel" | "retry-rejected") {
     try {
       await api.jobAction(id, a)
       await refresh()
@@ -159,10 +161,12 @@ export function JobDetailPage() {
                 Pause
               </Button>
             ) : (
-              (job.status === "paused" || job.status === "failed") && (
+              (job.status === "paused" ||
+                job.status === "failed" ||
+                job.status === "cancelled") && (
                 <Button onClick={() => action("resume")}>
                   <PlayIcon data-icon="inline-start" />
-                  Resume
+                  Continue
                 </Button>
               )
             )}
@@ -171,15 +175,37 @@ export function JobDetailPage() {
                 label="Cancel"
                 icon={<XIcon data-icon="inline-start" />}
                 title="Cancel this relay?"
-                description="Positions already delivered stay on the target. A cancelled relay cannot be resumed."
+                description="Positions already delivered stay on the target. You can continue a cancelled relay later from where it stopped."
                 confirm="Cancel relay"
                 onConfirm={() => action("cancel")}
               />
             )}
-            {!job.active && !finished && (
+            {!job.active && job.status !== "completed" && (
               <Button variant="outline" onClick={() => setEditing(true)}>
                 <PencilIcon data-icon="inline-start" />
                 Edit target
+              </Button>
+            )}
+            {!job.active && job.rejected > 0 && (
+              <Button
+                variant="outline"
+                title="Send the devices that had rejected positions again from the start. The target skips what it already stored."
+                onClick={() => action("retry-rejected")}
+              >
+                <RotateCcwIcon data-icon="inline-start" />
+                Retry rejected
+              </Button>
+            )}
+            {!job.active && (
+              <Button
+                variant="outline"
+                title="Start a new relay for the same devices, from where this one's range ended until now"
+                onClick={() =>
+                  navigate("/new", { state: { from: job, catchUp: true } })
+                }
+              >
+                <SkipForwardIcon data-icon="inline-start" />
+                Continue to now
               </Button>
             )}
             <Button

@@ -73,8 +73,7 @@ func (m *Manager) Start(jobID int64) error {
 	if err != nil {
 		return err
 	}
-	switch job.Status {
-	case store.StatusCompleted, store.StatusCancelled:
+	if job.Status == store.StatusCompleted {
 		return fmt.Errorf("job %d is %s", jobID, job.Status)
 	}
 	r := &run{m: m, jobID: jobID, stop: make(chan struct{})}
@@ -375,9 +374,9 @@ func (r *run) count(src Source, job store.Job, devices []store.JobDevice) error 
 		if r.stopped() {
 			return nil
 		}
-		n, err := src.Count(ctx, d.DeviceID, job.From, job.To)
-		if err != nil {
-			return fmt.Errorf("count positions of %s: %w", d.UniqueID, err)
+		n, ok := r.countWithRetry(src, d, job)
+		if !ok {
+			return nil // stopped while waiting; the devices counted so far keep their totals
 		}
 		if err := r.m.store.SetDeviceTotal(ctx, r.jobID, d.DeviceID, n); err != nil {
 			return err
@@ -389,6 +388,34 @@ func (r *run) count(src Source, job store.Job, devices []store.JobDevice) error 
 	j, _ := r.m.store.Job(ctx, r.jobID)
 	r.event("info", "%d positions to send", j.Total)
 	return nil
+}
+
+// countWithRetry counts one device's positions, waiting while the Traccar database is unavailable
+// (it may still be recovering after a power cut). ok=false means the job was stopped first.
+func (r *run) countWithRetry(src Source, d store.JobDevice, job store.Job) (n int64, ok bool) {
+	backoff := r.m.MinBackoff
+	waiting := false
+	defer func() {
+		if waiting {
+			r.endWait()
+			r.flush()
+		}
+	}()
+	for {
+		n, err := src.Count(context.Background(), d.DeviceID, job.From, job.To)
+		if err == nil {
+			return n, true
+		}
+		if !waiting {
+			waiting = true
+			r.beginWait("Traccar database: " + err.Error())
+			r.flush() // the flush ticker only starts once counting is over
+		}
+		if !r.sleep(backoff) {
+			return 0, false
+		}
+		backoff = min(backoff*2, r.m.MaxBackoff)
+	}
 }
 
 // device sends one device's positions in order, starting after its checkpoint.

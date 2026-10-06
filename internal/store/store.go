@@ -74,7 +74,7 @@ CREATE INDEX IF NOT EXISTS job_events_job ON job_events(job_id, id);
 `
 
 func Open(path string) (*Store, error) {
-	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=busy_timeout(10000)&_pragma=foreign_keys(ON)")
+	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=journal_mode(WAL)&_pragma=synchronous(FULL)&_pragma=busy_timeout(10000)&_pragma=foreign_keys(ON)")
 	if err != nil {
 		return nil, err
 	}
@@ -314,6 +314,34 @@ func (s *Store) SetStatus(ctx context.Context, id int64, status string) error {
 	}
 	_, err := s.db.ExecContext(ctx, q+" WHERE id = ?", append(args, id)...)
 	return err
+}
+
+// RewindRejected sends every device that had rejected positions back to the start of its range
+// and forgets the "rejected" tallies, so the job can be started again to retry them. Devices
+// without rejections keep their checkpoint. The target skips positions it already stored, so the
+// positions before a rejection are answered "already present". It returns the devices rewound.
+func (s *Store) RewindRejected(ctx context.Context, jobID int64) (int64, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx, `UPDATE job_devices SET sent = 0, rejected = 0, cursor_fixtime = NULL, cursor_id = 0,
+		inflight_id = 0, inflight_attempts = 0, done = 0 WHERE job_id = ? AND rejected > 0`, jobID)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return 0, nil // nothing to retry: leave the job untouched (the deferred rollback discards the no-op)
+	}
+	if _, err := tx.ExecContext(ctx, "DELETE FROM job_responses WHERE job_id = ? AND outcome = 'rejected'", jobID); err != nil {
+		return 0, err
+	}
+	if _, err := tx.ExecContext(ctx, "UPDATE jobs SET status = ? WHERE id = ?", StatusPaused, jobID); err != nil {
+		return 0, err
+	}
+	return n, tx.Commit()
 }
 
 func (s *Store) SetTotal(ctx context.Context, id int64) error {

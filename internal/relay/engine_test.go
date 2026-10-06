@@ -3,6 +3,7 @@ package relay
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -24,6 +25,7 @@ var t0 = time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
 type fakeSource struct {
 	devices   []traccar.Device
 	positions map[int64][]traccar.Position
+	countFail atomic.Int32 // the next this-many Count calls fail, as MariaDB does while recovering
 }
 
 func newFakeSource(devices, perDevice int) *fakeSource {
@@ -46,6 +48,9 @@ func (s *fakeSource) DevicesByIDs(context.Context, []int64) ([]traccar.Device, e
 }
 func (s *fakeSource) Close() error { return nil }
 func (s *fakeSource) Count(_ context.Context, id int64, from, to time.Time) (int64, error) {
+	if s.countFail.Add(-1) >= 0 {
+		return 0, errors.New("database is starting up")
+	}
 	return int64(len(s.positions[id])), nil
 }
 func (s *fakeSource) Page(_ context.Context, id int64, from, to time.Time, after traccar.Cursor, limit int) ([]traccar.Position, error) {

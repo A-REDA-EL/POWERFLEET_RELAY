@@ -200,7 +200,9 @@ export const api = {
       "targetUrl" | "headers" | "concurrency" | "rateLimit" | "timeoutSeconds"
     >
   ) => request("PATCH", `/api/jobs/${id}`, target),
-  jobAction: (id: number, action: "pause" | "resume" | "cancel") =>
-    request("POST", `/api/jobs/${id}/${action}`),
+  jobAction: (
+    id: number,
+    action: "pause" | "resume" | "cancel" | "retry-rejected"
+  ) => request("POST", `/api/jobs/${id}/${action}`),
   deleteJob: (id: number) => request("DELETE", `/api/jobs/${id}`),
 }

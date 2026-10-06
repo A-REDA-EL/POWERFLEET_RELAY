@@ -48,6 +48,22 @@ the PowerFleet Server, so only replay ranges the target is missing.
 
 The guarantee only holds if the target answers non-2xx when it fails to store a position.
 
+### Surviving restarts and power cuts
+
+- A job that was running when the relay stopped (container restart, host reboot, power loss) is
+  **continued automatically** at the next start, after the last acknowledged batch of each device.
+  It does not matter if the Traccar database is not up yet: the relay waits for it, also while
+  counting positions. The checkpoint database is written with `synchronous=FULL`.
+- The host must start Docker at boot (`systemctl enable docker`); the compose file sets
+  `restart: unless-stopped`.
+- A plain-text HTTP 404 (a reverse proxy while the Server restarts) is retried. Only the Server's
+  own JSON errors fail a job: wrong API key (401/403), import disabled or wrong path (404 JSON).
+  Fix the target (**Edit target**) and press **Continue**.
+- In the history, a paused, failed **or cancelled** job can be **Continued**. **Retry rejected**
+  sends the devices that had rejections again from the start of their range (the Server skips
+  what it already stored): use it after registering missing vehicles. **Continue to now** opens a
+  new relay for the same devices that starts where the old range ended.
+
 ## Reaching Traccar's database (MySQL on the host, relay in Docker)
 
 Traccar's MySQL/MariaDB runs on the server itself. The container can reach it two ways:

@@ -669,11 +669,30 @@ func (s *Server) jobAction(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	case "resume":
-		if job.Status != store.StatusPaused && job.Status != store.StatusFailed {
-			writeError(w, 409, "only paused or failed jobs can be resumed")
+		if job.Status != store.StatusPaused && job.Status != store.StatusFailed && job.Status != store.StatusCancelled {
+			writeError(w, 409, "only paused, failed or cancelled jobs can be resumed")
 			return
 		}
 		_ = s.Store.AddEvent(r.Context(), id, "info", "Resumed")
+		if err := s.Manager.Start(id); err != nil {
+			writeError(w, 500, err.Error())
+			return
+		}
+	case "retry-rejected":
+		if s.Manager.Running(id) || job.Status == store.StatusPending || job.Status == store.StatusCounting || job.Status == store.StatusRunning {
+			writeError(w, 409, "pause or wait for the job to finish before retrying its rejected positions")
+			return
+		}
+		n, err := s.Store.RewindRejected(r.Context(), id)
+		if err != nil {
+			writeError(w, 500, err.Error())
+			return
+		}
+		if n == 0 {
+			writeError(w, 409, "this job has no rejected positions")
+			return
+		}
+		_ = s.Store.AddEvent(r.Context(), id, "info", fmt.Sprintf("Retrying the rejected positions of %d device(s)", n))
 		if err := s.Manager.Start(id); err != nil {
 			writeError(w, 500, err.Error())
 			return

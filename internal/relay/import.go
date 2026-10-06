@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -193,6 +194,9 @@ func (r *run) deliverImport(client *http.Client, job store.Job, body []byte) (ou
 			return out, true, fmt.Errorf("target refused the API key (HTTP %d): check the X-Api-Key header and GPS_IMPORT_API_KEY on the Server", status)
 		case status == http.StatusNotFound && summarize(raw) == "Unknown object":
 			return batchOutcome{status: status, allRejected: "Unknown object"}, true, nil
+		case status == http.StatusNotFound && !jsonObject(raw):
+			// a plain-text 404 comes from a reverse proxy while the Server container restarts
+			reason = "HTTP 404 " + summarize(raw) + " (the Server may be restarting)"
 		case status == http.StatusNotFound:
 			return out, true, fmt.Errorf("import endpoint not found or disabled (HTTP 404 %s): check the URL and GPS_IMPORT_API_KEY on the Server", summarize(raw))
 		default: // 400, 422…: this batch cannot be stored
@@ -210,6 +214,12 @@ func (r *run) deliverImport(client *http.Client, job store.Job, body []byte) (ou
 		}
 		backoff = min(backoff*2, r.m.MaxBackoff)
 	}
+}
+
+// jsonObject reports whether a response body is a JSON object, as the Server's own errors are.
+func jsonObject(raw []byte) bool {
+	raw = bytes.TrimSpace(raw)
+	return len(raw) > 0 && raw[0] == '{' && json.Valid(raw)
 }
 
 func waitLimiterN(l *rate.Limiter, n int, stop <-chan struct{}) error {

@@ -108,17 +108,24 @@ function isHttpUrl(value: string) {
 
 export function NewRelayPage() {
   const navigate = useNavigate()
-  const prefill = (useLocation().state as { from?: Job } | null)?.from
+  const nav = useLocation().state as { from?: Job; catchUp?: boolean } | null
+  const prefill = nav?.from
+  // "Continue to now": the new range starts where the old one ended
+  const catchUp = !!nav?.catchUp
 
   const [step, setStep] = useState(0)
   const [preset, setPreset] = useState<string>(prefill ? "custom" : "30d")
   // preset ranges end "now" as of when the preset was picked
   const [presetRange, setPresetRange] = useState(() => presetToRange(30))
   const [customFrom, setCustomFrom] = useState(() =>
-    toLocalInput(prefill ? new Date(prefill.from) : presetToRange(30).from)
+    toLocalInput(
+      prefill
+        ? new Date(catchUp ? prefill.to : prefill.from)
+        : presetToRange(30).from
+    )
   )
   const [customTo, setCustomTo] = useState(() =>
-    toLocalInput(prefill ? new Date(prefill.to) : new Date())
+    toLocalInput(prefill && !catchUp ? new Date(prefill.to) : new Date())
   )
 
   // The fleet can be tens of thousands of devices: the list is searched and paged on the server.
