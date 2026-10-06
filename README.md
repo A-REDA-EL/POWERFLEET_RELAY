@@ -87,6 +87,7 @@ docker compose up -d --build
 | `RELAY_SECRET_KEY` | encrypts the stored DB password and signs sessions (required; changing it makes the stored password unreadable) |
 | `RELAY_DB_*` | optional: pre-configure the connection on first start (`MODE`, `SOCKET`, `HOST`, `PORT`, `USER`, `PASSWORD`, `NAME`, `TIMEZONE`) |
 | `RELAY_DB_TIMEZONE` | time zone of the machine Traccar runs on (e.g. `Europe/Paris`; `timedatectl` shows it). Traccar writes position times in that zone; leave empty only if it runs in UTC, otherwise every relayed position is shifted |
+| `RELAY_IMPORT_BATCH` / `RELAY_IMPORT_MAX_KB` | PowerFleet import: positions per request (default 200, max 1000) and largest request body in KB (default 512, max 900). Bigger batches mean fewer round trips |
 | `MYSQL_SOCKET_DIR` | host socket directory to mount (default `/run/mysqld`) |
 
 State (settings, jobs, checkpoints) lives in the `relay_data` volume (`/data/relay.db`).

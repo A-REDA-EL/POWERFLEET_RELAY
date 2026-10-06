@@ -57,6 +57,9 @@ func run(log *slog.Logger) error {
 
 	srv := &api.Server{Store: st, Box: box, AdminPassword: password, UI: web.FS(), Log: log}
 	mgr := relay.NewManager(st, srv.OpenSource, log)
+	// import batches: the Server accepts up to 1000 positions and 1 MiB per request
+	mgr.ImportBatchSize = envInt("RELAY_IMPORT_BATCH", mgr.ImportBatchSize, 1, 1000)
+	mgr.ImportMaxBytes = envInt("RELAY_IMPORT_MAX_KB", mgr.ImportMaxBytes>>10, 16, 900) << 10
 	srv.Manager = mgr
 
 	ctx := context.Background()
@@ -130,6 +133,14 @@ func healthcheck() int {
 		return 1
 	}
 	return 0
+}
+
+func envInt(key string, def, lo, hi int) int {
+	n, err := strconv.Atoi(os.Getenv(key))
+	if err != nil {
+		return def
+	}
+	return min(max(n, lo), hi)
 }
 
 func env(key, def string) string {

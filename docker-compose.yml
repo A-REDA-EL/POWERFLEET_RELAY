@@ -18,6 +18,9 @@ services:
       RELAY_DB_USER: ${RELAY_DB_USER:-}
       RELAY_DB_PASSWORD: ${RELAY_DB_PASSWORD:-}
       RELAY_DB_NAME: ${RELAY_DB_NAME:-}
+      # PowerFleet import speed: positions per request (Server max 1000) and largest request in KB (Server max 1024)
+      RELAY_IMPORT_BATCH: ${RELAY_IMPORT_BATCH:-}
+      RELAY_IMPORT_MAX_KB: ${RELAY_IMPORT_MAX_KB:-}
       RELAY_DB_TIMEZONE: ${RELAY_DB_TIMEZONE:-} # time zone of the Traccar host, e.g. Europe/Paris (empty = UTC)
     volumes:
       - relay_data:/data

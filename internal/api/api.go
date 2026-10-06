@@ -462,7 +462,7 @@ func (s *Server) createJob(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// the Server imports a few batches at a time (GPS_IMPORT_CONCURRENCY, default 2)
-		req.Concurrency = clamp(req.Concurrency, 1, 8, 2)
+		req.Concurrency = clamp(req.Concurrency, 1, 32, 2)
 	default:
 		writeError(w, 400, "mode must be forward or import")
 		return
@@ -638,7 +638,7 @@ func (s *Server) updateJobTarget(w http.ResponseWriter, r *http.Request) {
 			writeError(w, 400, "PowerFleet import needs the Server's API key (X-Api-Key)")
 			return
 		}
-		req.Concurrency = clamp(req.Concurrency, 1, 8, 2)
+		req.Concurrency = clamp(req.Concurrency, 1, 32, 2)
 	} else {
 		req.Concurrency = clamp(req.Concurrency, 1, 64, 4)
 	}
